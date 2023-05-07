@@ -1,0 +1,4 @@
+DROP DATABASE IF EXISTS application;
+DROP USER IF EXISTS node_app;
+CREATE USER node_app WITH PASSWORD '123456';
+CREATE DATABASE application OWNER node_app;

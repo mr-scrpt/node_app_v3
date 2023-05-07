@@ -1,0 +1,16 @@
+version: '3.1'
+
+services:
+  db:
+    image: postgres
+    container_name: node_app
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: '-A md5'
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./db:/home/db
