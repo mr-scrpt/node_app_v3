@@ -6,13 +6,10 @@ const pg = require('pg');
 const metasql = require('metasql');
 const { loadDir } = require('../server/src/loader');
 
-const DB_MSG = path.join(process.cwd(), './db/msg');
-// const DB_UHB = path.join(process.cwd(), './db/uhb');
-const SCHEMAS_MSG = path.join(process.cwd(), './schemas/msg');
-const entitys = ['msg'];
+const entity = 'msg';
 const configPath = path.join(process.cwd(), './config');
 
-const read = (name, pathTo) => fsp.readFile(path.join(pathTo, name), 'utf8');
+const read = (filePath) => fsp.readFile(filePath, 'utf8');
 
 const execute = async (client, sql) => {
   try {
@@ -23,14 +20,23 @@ const execute = async (client, sql) => {
 };
 
 const notEmpty = (s) => s.trim() !== '';
-
+const toBool = [() => true, () => false];
 const executeFile = async (client, name, pathTo) => {
+  const filePath = path.join(pathTo, name);
+  const exists = await fsp.access(filePath).then(...toBool);
+  if (!exists) {
+    console.log('----file is not exists---');
+    return;
+  }
+  let counter = 0;
   console.log(`Execute file: ${name}`);
-  const sql = await read(name, pathTo);
+  const sql = await read(filePath);
   const commands = sql.split(';\n').filter(notEmpty);
   for (const command of commands) {
     await execute(client, command);
+    counter++;
   }
+  console.log(`Total command: ${counter} executed from file ${name}`);
 };
 
 const generateFilesFromSchemas = async ({ pathToDB, pathToSchema }) => {
@@ -46,34 +52,34 @@ const generateFilesFromSchemas = async ({ pathToDB, pathToSchema }) => {
   await fsp.rename(typesFile, domainTypes);
 };
 
-const generateDBFromSQLFileList = async (connection, pathDB, fileList) => {
-  const instAdmin = new pg.Client(connection);
-  await instAdmin.connect();
+const executeSQLFileList = async (connection, pathDB, fileList) => {
+  const inst = new pg.Client(connection);
+  await inst.connect();
   for await (const file of fileList) {
-    await executeFile(instAdmin, file, pathDB);
+    console.log('file: ', file);
+    await executeFile(inst, file, pathDB);
   }
-  await instAdmin.end();
+  await inst.end();
 };
 
 (async () => {
   const { userDB, adminDB } = await loadDir(configPath, {});
-  entitys.forEach((entity) => {
-    const paths = {
-      pathToDB: path.join(process.cwd(), `./db/${entity}`),
-      pathToSchema: path.join(process.cwd(), `./schemas/${entity}`),
-    };
+  const paths = {
+    pathToDB: path.join(process.cwd(), `./db/${entity}`),
+    pathToSchema: path.join(process.cwd(), `./schemas/${entity}`),
+  };
 
-    generateFilesFromSchemas(paths);
+  await generateFilesFromSchemas(paths);
 
-    generateDBFromSQLFileList({ ...userDB, ...adminDB }, paths.pathToDB, [
-      'install.sql',
-    ]);
-    generateDBFromSQLFileList(userDB, paths.pathToDB, [
-      'structure.sql',
-      'data.sql',
-    ]);
-    console.log('Environment is ready');
-  });
+  await executeSQLFileList({ ...userDB, ...adminDB }, paths.pathToDB, [
+    'install.sql',
+  ]);
+
+  await executeSQLFileList(userDB, paths.pathToDB, [
+    'structure.sql',
+    'data.sql',
+  ]);
+  console.log('Environment is ready');
 })().catch((err) => {
   console.error(err);
 });
